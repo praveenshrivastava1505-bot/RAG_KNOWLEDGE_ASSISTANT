@@ -1,0 +1,100 @@
+{
+  "users": {
+    "Aryan": {
+      "password": "Aryan@2674",
+      "name": "ARYAN SHRIVASTAVA",
+      "chats": {
+        "e481e868-0690-44a4-9c6e-78dad0358956": {
+          "title": "what is PCI bUS bhai??",
+          "messages": [
+            {
+              "role": "user",
+              "content": "what is PCI bUS bhai??"
+            },
+            {
+              "role": "user",
+              "content": "what is PCI bus??"
+            },
+            {
+              "role": "assistant",
+              "content": "Based on the provided context, the **PCI (Peripheral Component Interconnect) Bus** is a high-speed parallel communication bus used to connect peripheral devices—such as network cards, sound cards, graphics cards, and storage controllers—to the motherboard. Developed by Intel, it became one of the most widely used expansion buses in desktop computers.\n\n### Key Features of the PCI Bus:\n1. High-speed parallel data transfer.\n2. Supports Plug and Play devices.\n3. Allows multiple expansion cards.\n4. Standard interface for peripheral devices.\n5. Provides direct communication with the CPU and memory."
+            },
+            {
+              "role": "user",
+              "content": "SCSI bus ky hota hai?"
+            },
+            {
+              "role": "assistant",
+              "content": "Based on the provided context, the **SCSI (Small Computer System Interface) Bus** is a high-performance interface standard used to connect multiple peripheral devices—such as hard disks, scanners, printers, tape drives, and optical drives—to a computer. \n\nIt is mainly used in servers and professional workstations where high performance and reliability are required."
+            },
+            {
+              "role": "user",
+              "content": "bhai USB ky hota hai??"
+            },
+            {
+              "role": "assistant",
+              "content": "Provided context ke aadhar par **USB** ka vivaran yeh hai:\n\n* **Full Form:** Universal Serial Bus\n* **Type:** Serial Bus (Yeh external devices ko connect karne ke liye use hota hai).\n\n### Characteristics / Features:\n* **Connection:** External devices ke liye.\n* **Cost:** Low (Sasta)\n* **Hot Swapping:** Yes\n* **Plug and Play:** Yes\n* **Speed:** Speed/performance USB version par depend karti hai.\n\n### Applications (Kahan use hota hai):\n1. Keyboard\n2. Mouse\n3. Printer\n4. Scanner\n5. Pen Drive\n6. External Hard Disk\n7. Webcam\n8. Mobile Phone Connection\n\n### Disadvantages:\n1. Cable ki length limited hoti hai.\n2. Kuch specialized interfaces ke mukable speed kam hoti hai.\n3. Performance USB version par nirbhar karti hai."
+            }
+          ]
+        },
+        "1563d6d3-a950-4f7a-8215-56bd8c2cc132": {
+          "title": "what is PCI bus?",
+          "messages": [
+            {
+              "role": "user",
+              "content": "what is PCI bus?"
+            },
+            {
+              "role": "assistant",
+              "content": "Please upload a document in this specific chat first before asking questions."
+            }
+          ]
+        },
+        "6634ecdc-4cea-45ba-a318-0aeb7c98bcbd": {
+          "title": "bhai ye PCI bus ky...",
+          "messages": [
+            {
+              "role": "user",
+              "content": "bhai ye PCI bus ky hota hai??"
+            },
+            {
+              "role": "assistant",
+              "content": "Please upload a document in this specific chat first before asking questions."
+            },
+            {
+              "role": "user",
+              "content": "what is PCI bus??"
+            },
+            {
+              "role": "assistant",
+              "content": "Please upload a document in this specific chat first before asking questions."
+            }
+          ]
+        },
+        "41d56d48-900e-41fc-b11b-cace1d1bc0b2": {
+          "title": "New Chat",
+          "messages": []
+        }
+      }
+    },
+    "nhiboluga": {
+      "password": "nhiboluga1234",
+      "name": "VANISH",
+      "chats": {
+        "fab29274-16e3-4b66-9ea4-b6b99780c2c6": {
+          "title": "hii",
+          "messages": [
+            {
+              "role": "user",
+              "content": "hii"
+            },
+            {
+              "role": "assistant",
+              "content": "Please upload a document in this specific chat first before asking questions."
+            }
+          ]
+        }
+      }
+    }
+  }
+}
