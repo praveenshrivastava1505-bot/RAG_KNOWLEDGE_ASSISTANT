@@ -38,12 +38,23 @@ load_dotenv()
 # 2. API KEY
 # ============================================================
 # Hugging Face Hub token for accessing the Hugging Face Inference API.
-# Loaded securely from your .env file.
+# Checks environment variables and Streamlit secrets.
 #
 # IMPORTANT: Never hardcode your actual key here!
 # ============================================================
 
-HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+def _resolve_hf_token() -> str:
+    token = os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.environ.get("HUGGINGFACEHUB_API_TOKEN")
+    if not token:
+        try:
+            import streamlit as st
+            if "HUGGINGFACEHUB_API_TOKEN" in st.secrets:
+                token = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+        except Exception:
+            pass
+    return token or ""
+
+HUGGINGFACEHUB_API_TOKEN = _resolve_hf_token()
 
 # ============================================================
 # 3. MODEL SETTINGS
