@@ -67,6 +67,7 @@ def get_llm(
         temperature=temp,
         max_new_tokens=tokens,
         timeout=120,
+        task="conversational",
     )
 
     return llm
