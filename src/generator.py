@@ -1,108 +1,136 @@
 """
-src/generator.py — Pure Hugging Face Endpoint LLM Generator
+src/generator.py — LLM Generator (Google Gemini API via LangChain)
 
 Module: Module 9 (LLM Generator)
 
 Responsibility:
-    - Initialize and configure pure HuggingFaceEndpoint from langchain_huggingface
-    - Strictly use the official Hugging Face Serverless API with HUGGINGFACEHUB_API_TOKEN (supports st.secrets & env)
-    - Use the stable free-tier model: repo_id="mistralai/Mistral-7B-Instruct-v0.2"
-    - Explicitly set task="conversational" for provider routing
+    - Initialize and configure the Google Gemini LLM (ChatGoogleGenerativeAI)
+    - Default to LLM_MODEL ("gemini-1.5-flash") and LLM_TEMPERATURE (0.2) from src/config.py
     - Expose get_llm() factory function for LCEL pipelines (prompt | llm | StrOutputParser)
     - Provide generate_response() helper to generate textual answers
+
+What is the Generator?
+    The Generator is the "brain/speaker" of the RAG assistant:
+    1. It receives the grounded prompt prepared by Module 8 (containing retrieved context + question).
+    2. Sends the prompt to Google Gemini 1.5 Flash via ChatGoogleGenerativeAI.
+    3. Returns a well-formatted, factual natural language answer to the user.
 
 Imported by:
     - src/rag_pipeline.py (in Module 10)
 """
 
 import os
-from typing import Optional
+from typing import Optional, List
 # pyrefly: ignore [missing-import]
-from langchain_huggingface import HuggingFaceEndpoint
+from langchain_google_genai import ChatGoogleGenerativeAI
+from dotenv import load_dotenv
 
 from src.config import (
-    HUGGINGFACEHUB_API_TOKEN,
+    GOOGLE_API_KEY,
     LLM_MODEL,
+    MODELS_TO_TRY,
     LLM_TEMPERATURE,
-    LLM_MAX_TOKENS,
+    LLM_MAX_OUTPUT_TOKENS,
 )
+
+load_dotenv()
+
+# Candidate models list with fallback options to prevent 404 errors
+models_to_try: List[str] = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
 
 
 def get_llm(
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
     api_key: Optional[str] = None,
-    max_new_tokens: Optional[int] = None,
-    task: str = "conversational",
-) -> HuggingFaceEndpoint:
+    max_output_tokens: Optional[int] = None,
+    candidate_models: Optional[List[str]] = None,
+) -> ChatGoogleGenerativeAI:
     """
-    Initialize and return a pure HuggingFaceEndpoint LLM instance.
+    Initialize and return a Google Gemini Chat LLM instance with fallback support.
 
     Args:
-        model_name (str, optional): Hugging Face model repository identifier.
-                                     Defaults to LLM_MODEL from config.py ('mistralai/Mistral-7B-Instruct-v0.2').
-        temperature (float, optional): Sampling temperature (0.0 to 1.0).
-                                       Defaults to LLM_TEMPERATURE from config.py (0.3).
-        api_key (str, optional): Hugging Face API token.
-                                 Defaults to HUGGINGFACEHUB_API_TOKEN (or st.secrets / os.environ).
-        max_new_tokens (int, optional): Maximum new tokens to generate (default: 1024 from config.py).
-        task (str, optional): Hugging Face task type (default: "conversational").
+        model_name (str, optional): Gemini model name (default: "gemini-flash-latest").
+        temperature (float, optional): Sampling temperature (default: 0.2).
+        api_key (str, optional): Google API Key.
+        max_output_tokens (int, optional): Max output tokens (default: 8192).
+        candidate_models (List[str], optional): List of models to try in order.
 
     Returns:
-        HuggingFaceEndpoint: Configured pure LangChain Hugging Face Endpoint instance.
+        ChatGoogleGenerativeAI: Configured LangChain Chat model instance.
 
     Raises:
-        ValueError: If no valid Hugging Face API token is configured.
+        ValueError: If no valid Google API key is found or no model could be initialized.
     """
-    # 1. Resolve token securely from api_key argument, config, os.environ, or st.secrets
-    token = api_key or HUGGINGFACEHUB_API_TOKEN or os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.environ.get("HUGGINGFACEHUB_API_TOKEN")
-    if not token:
+    key = (
+        api_key
+        or GOOGLE_API_KEY
+        or os.getenv("GOOGLE_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+    )
+    if not key:
         try:
             import streamlit as st
-            if "HUGGINGFACEHUB_API_TOKEN" in st.secrets:
-                token = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+            if "GOOGLE_API_KEY" in st.secrets:
+                key = st.secrets["GOOGLE_API_KEY"]
         except Exception:
             pass
 
-    if not token:
-        raise ValueError(
-            "Hugging Face API token not found. Please ensure HUGGINGFACEHUB_API_TOKEN "
-            "is set in your .env file or Streamlit secrets."
-        )
+    if not key:
+        raise ValueError("Could not initialize any Gemini model. Check your API key.")
 
-    model = model_name or LLM_MODEL
     temp = temperature if temperature is not None else LLM_TEMPERATURE
-    tokens = max_new_tokens if max_new_tokens is not None else LLM_MAX_TOKENS
+    max_tokens = max_output_tokens or LLM_MAX_OUTPUT_TOKENS
+    candidates = [model_name] if model_name else (candidate_models or models_to_try)
 
-    # 2. Instantiate HuggingFaceEndpoint with task="conversational"
-    llm = HuggingFaceEndpoint(
-        repo_id=model,
-        huggingfacehub_api_token=token,
-        temperature=temp,
-        max_new_tokens=tokens,
-        task=task,
-        timeout=120,
-    )
+    llm = None
+    for m in candidates:
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model=m,
+                google_api_key=key,
+                temperature=temp,
+                max_tokens=max_tokens,
+                max_output_tokens=max_tokens,
+            )
+            break
+        except Exception as e:
+            print(f"Model {m} failed: {e}")
+            continue
+
+    if not llm:
+        raise ValueError("Could not initialize any Gemini model. Check your API key.")
 
     return llm
 
 
 def generate_response(
     prompt: str,
-    llm: Optional[HuggingFaceEndpoint] = None,
+    llm: Optional[ChatGoogleGenerativeAI] = None,
+    candidate_models: Optional[List[str]] = None,
 ) -> str:
     """
-    Send a direct text prompt to the Hugging Face LLM and return the generated text response.
+    Send a direct text prompt to the Gemini LLM with automatic fallback on 404 errors.
 
     Args:
         prompt (str): Text prompt or formatted message.
-        llm (HuggingFaceEndpoint, optional): Active LLM instance.
+        llm (ChatGoogleGenerativeAI, optional): Active LLM instance.
+        candidate_models (List[str], optional): Fallback models if invocation fails.
 
     Returns:
         str: Clean string content of the model's response.
     """
-    model = llm or get_llm()
-    response = model.invoke(prompt)
-    if hasattr(response, "content"):
-        return str(response.content).strip()
-    return str(response).strip()
+    candidates = candidate_models or models_to_try
+    for m in candidates:
+        try:
+            model = llm if (llm and m == candidates[0]) else get_llm(model_name=m)
+            response = model.invoke(prompt)
+            if hasattr(response, "content"):
+                return str(response.content).strip()
+            return str(response).strip()
+        except Exception as e:
+            print(f"Model {m} invocation failed: {e}. Trying fallback...")
+            continue
+
+    raise RuntimeError("All Gemini models in fallback list failed to generate a response.")
+

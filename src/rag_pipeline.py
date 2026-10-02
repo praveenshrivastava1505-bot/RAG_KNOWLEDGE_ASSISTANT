@@ -26,7 +26,7 @@ from langchain_core.output_parsers import StrOutputParser
 # pyrefly: ignore [missing-import]
 from langchain_chroma import Chroma
 
-from src.config import CHROMA_DB_DIR, CHROMA_COLLECTION_NAME
+from src.config import CHROMA_DB_DIR, CHROMA_COLLECTION_NAME, MODELS_TO_TRY, DEFAULT_TOP_K
 from src.document_loader import load_document
 from src.text_splitter import split_documents
 from src.embeddings import get_embedding_model
@@ -140,7 +140,7 @@ def ingest_document(
 
 def ask_question(
     question: str,
-    k: int = 3,
+    k: int = 10,
     vector_store: Optional[Chroma] = None,
     username: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -156,7 +156,7 @@ def ask_question(
 
     Args:
         question (str): The user's query or question.
-        k (int): Number of relevant document chunks to retrieve (default: 3).
+        k (int): Number of relevant document chunks to retrieve (default: 10).
         vector_store (Chroma, optional): Active vector store instance.
         username (str, optional): Logged-in username to enforce data isolation.
         session_id (str, optional): Active chat session UUID for session-level isolation.
@@ -191,23 +191,41 @@ def ask_question(
 
     # Step 3: Components for the Chain (Module 8 Prompt + Module 9 LLM + Output Parser)
     prompt_template = get_rag_prompt_template()
-    llm = get_llm()
     output_parser = StrOutputParser()
 
-    # Step 4: LCEL Chain Composition: Prompt -> Hugging Face LLM -> String Output Parser
-    rag_chain = prompt_template | llm | output_parser
+    # Step 4 & 5: Invoke Chain with fallback across candidate models
+    answer = None
+    last_error = None
+    for m in MODELS_TO_TRY:
+        try:
+            llm = get_llm(model_name=m)
+            rag_chain = prompt_template | llm | output_parser
+            answer = rag_chain.invoke(
+                {
+                    "context": context_str,
+                    "question": clean_question,
+                }
+            )
+            break
+        except Exception as e:
+            last_error = e
+            print(f"Model {m} failed during query generation: {e}. Trying next candidate...")
+            continue
 
-    # Step 5: Invoke Chain
-    answer = rag_chain.invoke(
-        {
-            "context": context_str,
-            "question": clean_question,
-        }
-    )
+    if answer is None:
+        raise RuntimeError(f"All candidate Gemini models failed to generate an answer. Last error: {last_error}")
+
+    clean_answer = str(answer).strip()
+    for marker in [
+        "\nContext:", "\n\nContext:", "\nQuestion:", "\n\nQuestion:",
+        "\n[Snippet", "\nSTRICT RULES:", "\nCRITICAL RULES:", "\nFormat:", "\nNote:", "\nDO NOT repeat"
+    ]:
+        if marker in clean_answer:
+            clean_answer = clean_answer.split(marker)[0].strip()
 
     return {
         "question": clean_question,
-        "answer": answer.strip(),
+        "answer": clean_answer,
         "source_documents": retrieved_docs,
         "username": clean_user,
         "session_id": clean_session,

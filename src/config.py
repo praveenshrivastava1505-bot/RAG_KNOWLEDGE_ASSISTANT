@@ -35,26 +35,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ============================================================
-# 2. API KEY
+# 2. API KEYS
 # ============================================================
-# Hugging Face Hub token for accessing the Hugging Face Inference API.
+# Google Gemini API Key for accessing Gemini models via LangChain.
 # Checks environment variables and Streamlit secrets.
-#
-# IMPORTANT: Never hardcode your actual key here!
 # ============================================================
 
-def _resolve_hf_token() -> str:
-    token = os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.environ.get("HUGGINGFACEHUB_API_TOKEN")
-    if not token:
+def _resolve_google_api_key() -> str:
+    key = os.getenv("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not key:
         try:
             import streamlit as st
-            if "HUGGINGFACEHUB_API_TOKEN" in st.secrets:
-                token = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+            if "GOOGLE_API_KEY" in st.secrets:
+                key = st.secrets["GOOGLE_API_KEY"]
         except Exception:
             pass
-    return token or ""
+    return key or ""
 
-HUGGINGFACEHUB_API_TOKEN = _resolve_hf_token()
+GOOGLE_API_KEY = _resolve_google_api_key()
 
 # ============================================================
 # 3. MODEL SETTINGS
@@ -67,21 +65,24 @@ HUGGINGFACEHUB_API_TOKEN = _resolve_hf_token()
 #   all-MiniLM-L6-v2 produces dense 384-dimensional semantic vectors.
 #
 # LLM_MODEL:
-#   Fast, open-source model optimized for text-generation and RAG.
-#   "HuggingFaceH4/zephyr-7b-beta" works natively with task="text-generation".
+#   Google Gemini 1.5 Flash ("gemini-1.5-flash").
+#   Fast, highly intelligent model optimized for RAG and technical Q&A.
 #
 # LLM_TEMPERATURE:
-#   Controls how "creative" the LLM responses are.
-#   0.0 = very deterministic (same input → same output)
-#   1.0 = very creative (more randomness)
-#   0.3 = good balance for RAG (factual but not robotic)
+#   Controls creativity. 0.2 provides high factual consistency and adherence to context.
+# ============================================================
+
+# LLM_MODEL & FALLBACKS:
+#   Primary model and fallback models to prevent 404 errors.
 # ============================================================
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_DIMENSIONS = 384
-LLM_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
-LLM_TEMPERATURE = 0.3
-LLM_MAX_TOKENS = 1024
+LLM_MODEL = "gemini-1.5-flash"
+MODELS_TO_TRY = ["gemini-1.5-flash", "gemini-flash-latest", "gemini-3.8-flash"]
+LLM_TEMPERATURE = 0.2
+LLM_MAX_OUTPUT_TOKENS = 8192
+DEFAULT_TOP_K = 10
 
 # ============================================================
 # 4. TEXT SPLITTING SETTINGS

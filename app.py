@@ -11,9 +11,13 @@ Responsibility:
     - Light-themed, clean SaaS styling
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 # pyrefly: ignore [missing-import]
 import streamlit as st
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import PromptTemplate
 
 from src.rag_pipeline import ask_question, ingest_document
 from src.vector_store import load_vector_store
@@ -28,6 +32,71 @@ from src.user_manager import (
     save_chat_message,
     delete_all_chats,
 )
+
+load_dotenv()
+api_key = os.environ.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    try:
+        if "GOOGLE_API_KEY" in st.secrets:
+            api_key = st.secrets["GOOGLE_API_KEY"]
+    except Exception:
+        pass
+
+# Gemini 1.5 Flash Model Initialization with max_output_tokens=8192
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
+    google_api_key=api_key,
+    temperature=0.2,
+    max_output_tokens=8192,
+)
+
+# Master Prompt Definition
+master_prompt = """You are an advanced, highly intelligent AI technical assistant and RAG engine designed to help students. Your task is to generate precise, structured, detailed, and accurate technical answers strictly based on the provided PDF context.
+
+==================================================
+CRITICAL LANGUAGE DETECTION & SWITCHING RULES:
+==================================================
+1. Language Match: You must dynamically detect the language of the user's question and respond in the exact same language format:
+   - If the user asks in pure English, your entire response must be in professional, clear English.
+   - If the user asks in Hinglish (Hindi written in English/Latin alphabets, e.g., "kya hota hai", "ky", "kaise kaam karta hai"), your entire response must be in natural Hinglish.
+   - If the user explicitly asks in Hindi or writes "in hindi" at the end of the query, your entire response must be in pure Hindi (Devanagari script).
+
+==================================================
+CRITICAL CONTENT, DEPTH & COMPLETENESS RULES:
+==================================================
+1. Comprehensive Extraction: Do not summarize too short or truncate details. Provide full, comprehensive technical explanations, definitions, functions, advantages, disadvantages, and examples as they are written in the PDF context.
+2. Exhaustive Bullet Points: Ensure every sub-point and related detail available in the retrieved context for that topic is included.
+3. CRITICAL: Never truncate your response. Output the complete, exhaustive details for ALL components present in the context without stopping halfway.
+
+==================================================
+CRITICAL FORMATTING & STRUCTURE RULES:
+==================================================
+1. Bullet Point Format ONLY: Never generate long, solid, or unstructured paragraphs. All explanations must be cleanly formatted using hierarchical bullet points matching the PDF flow.
+2. Natural PDF Flow: Maintain the natural flow of the source document without hallucinating extra details.
+3. Deterministic Consistency: Ensure that identical queries yield consistent, uniformly structured outputs every single time.
+
+==================================================
+AUTOMATIC DYNAMIC BOLDING RULES:
+==================================================
+1. Intelligent Highlighting: Automatically identify key structural elements, component names, and sub-headings within the text and wrap them in double asterisks (**) to make them bold.
+2. Target Elements for Bolding: 
+   - Main topics and overarching titles.
+   - Component names, registers, units, or modules (e.g., **Memory Address Register (MAR):**).
+   - Structural sub-headings and labels (e.g., **Definition:**, **Functions:**, **Advantages:**, **Disadvantages:**, **Example:**).
+
+==================================================
+CONTEXT AND QUESTION:
+==================================================
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:
+"""
+
+QA_CHAIN_PROMPT = PromptTemplate.from_template(master_prompt)
 
 
 # ============================================================================
@@ -288,197 +357,198 @@ if st.session_state.logged_in_username is None:
 current_username = st.session_state.logged_in_username
 current_display_name = st.session_state.logged_in_name
 
-# Ensure active_session_id is initialized
-if not st.session_state.active_session_id:
-    st.session_state.active_session_id = create_chat_session(current_username, "New Chat")
-
-current_session_id = st.session_state.active_session_id
-
-
-# ============================================================================
-# 5. SIDEBAR LAYOUT
-# ============================================================================
-
-with st.sidebar:
-    # 1. New Chat Button: Immediately creates a brand new UUID session
-    if st.button("＋ New Chat", use_container_width=True):
+if current_username:
+    # Ensure active_session_id is initialized
+    if not st.session_state.active_session_id:
         st.session_state.active_session_id = create_chat_session(current_username, "New Chat")
-        st.rerun()
 
-    st.markdown("")
+    current_session_id = st.session_state.active_session_id
 
-    # 2. Document Upload Section: Strictly bound to current_session_id
-    uploaded_file = st.file_uploader(
-        "Upload Document",
-        type=["pdf", "docx", "txt"],
-        help="Upload a PDF, Word, or text file to index strictly into this specific chat session.",
-    )
+    # ============================================================================
+    # 5. SIDEBAR LAYOUT
+    # ============================================================================
 
-    if uploaded_file is not None:
-        if st.button("🚀 Index Document", use_container_width=True):
-            data_dir = Path("data")
-            data_dir.mkdir(parents=True, exist_ok=True)
-            saved_file_path = data_dir / uploaded_file.name
+    with st.sidebar:
+        # 1. New Chat Button: Immediately creates a brand new UUID session
+        if st.button("＋ New Chat", use_container_width=True):
+            st.session_state.active_session_id = create_chat_session(current_username, "New Chat")
+            st.rerun()
 
-            with open(saved_file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+        st.markdown("")
 
-            progress_bar = st.progress(0, text="Preparing document...")
-            with st.spinner(f"Indexing {uploaded_file.name} into current session..."):
-                try:
-                    progress_bar.progress(25, text="Loading document...")
-                    progress_bar.progress(50, text="Splitting into chunks...")
-                    progress_bar.progress(75, text="Generating embeddings with session tag...")
-                    result = ingest_document(
-                        file_path=str(saved_file_path),
-                        username=current_username,
-                        session_id=current_session_id,
-                    )
-                    progress_bar.progress(100, text="Completed!")
+        # 2. Document Upload Section: Strictly bound to current_session_id
+        uploaded_file = st.file_uploader(
+            "Upload Document",
+            type=["pdf", "docx", "txt"],
+            help="Upload a PDF, Word, or text file to index strictly into this specific chat session.",
+        )
 
-                    st.success(
-                        f"Indexed **{result['chunks_created']}** chunks from `{uploaded_file.name}`."
-                    )
-                except Exception as e:
-                    progress_bar.empty()
-                    st.error(f"Ingestion failed: {e}")
+        if uploaded_file is not None:
+            if st.button("🚀 Index Document", use_container_width=True):
+                data_dir = Path("data")
+                data_dir.mkdir(parents=True, exist_ok=True)
+                saved_file_path = data_dir / uploaded_file.name
 
-    st.divider()
+                with open(saved_file_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
 
-    # 3. Recent Chats Section (Scoped to logged-in user with UUID lookup)
-    st.subheader("Recent Chats")
-    recent_chats = get_recent_chats(current_username)
-
-    if not recent_chats:
-        st.caption("No recent chats yet.")
-    else:
-        # Display user's past chats in reverse order (newest first)
-        for chat_item in reversed(recent_chats):
-            chat_sid = chat_item["session_id"]
-            chat_title = chat_item["title"]
-            is_active = (chat_sid == current_session_id)
-            label = f"💬  {chat_title}" + (" (active)" if is_active else "")
-
-            if st.button(label, key=f"btn_chat_{chat_sid}", use_container_width=True):
-                st.session_state.active_session_id = chat_sid
-                st.rerun()
-
-    st.divider()
-
-    # 4. Settings & User Controls
-    top_k = st.slider("Retrieval context chunks (k)", min_value=1, max_value=5, value=3)
-
-    if st.button("🗑️ Clear All Chats", use_container_width=True):
-        delete_all_chats(current_username)
-        st.session_state.active_session_id = create_chat_session(current_username, "New Chat")
-        st.rerun()
-
-    st.markdown("")
-
-    # 5. Logout Button
-    if st.button("🚪 Logout", use_container_width=True):
-        st.session_state.logged_in_username = None
-        st.session_state.logged_in_name = None
-        st.session_state.active_session_id = None
-        st.rerun()
-
-
-# ============================================================================
-# 6. MAIN CHAT AREA & STRICT SESSION GUARDRAIL
-# ============================================================================
-
-current_title = get_chat_title(current_username, current_session_id)
-history_messages = get_chat_messages(current_username, current_session_id)
-
-# Render Header / Greeting
-if current_title == "New Chat" and len(history_messages) == 0:
-    st.title(f"Hi {current_display_name}!")
-    st.markdown("Welcome to **Knowledge Assistant**. Upload a document in the sidebar to start asking questions in this chat.")
-else:
-    st.title(current_title)
-
-# Render Chat History for Active Session
-for message in history_messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# Chat Input Logic & Guardrail
-if prompt := st.chat_input("Ask a question about your documents..."):
-    # 1. Dynamic Chat Naming if title is still default "New Chat"
-    if current_title in ("New Chat", "", None):
-        words = prompt.strip().split()
-        dynamic_title = " ".join(words[:5]) + ("..." if len(words) > 5 else "")
-        update_chat_title(current_username, current_session_id, dynamic_title)
-    else:
-        dynamic_title = None
-
-    # 2. Instantly render and save the user message
-    save_chat_message(current_username, current_session_id, "user", prompt, title=dynamic_title)
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    # 3. Instantly open assistant container & show spinner BEFORE any backend/DB check
-    with st.chat_message("assistant"):
-        with st.spinner("Searching documents..."):
-            # --- ALL BACKEND & DATABASE CHECKS RUN INSIDE THIS SPINNER ---
-            has_docs = has_session_documents(current_username, current_session_id)
-
-            # Condition A: 0 chunks in this session (Greeting vs Guardrail Warning)
-            if not has_docs:
-                clean_input = prompt.lower().strip().rstrip("!?.")
-                common_greetings = {
-                    "hi", "hello", "hey", "hii", "hiii", "heyy",
-                    "greetings", "good morning", "good afternoon", "good evening"
-                }
-
-                if clean_input in common_greetings:
-                    answer_text = (
-                        f"Hi {st.session_state.logged_in_name}! I would love to help you. "
-                        f"Please upload a document in the sidebar first so we can get started."
-                    )
-                else:
-                    answer_text = "Please upload a document in this specific chat first before asking questions."
-
-                sources = []
-                error_msg = None
-
-            # Condition B: Chunks exist -> Run RAG Pipeline (similarity search + LLM)
-            else:
-                try:
-                    response = ask_question(
-                        question=prompt,
-                        k=top_k,
-                        username=current_username,
-                        session_id=current_session_id,
-                    )
-                    answer_text = response["answer"]
-                    sources = response.get("source_documents", [])
-                    error_msg = None
-                except Exception as e:
-                    answer_text = None
-                    sources = []
-                    error_msg = f"⚠️ An error occurred: `{e}`"
-
-        # 4. Display response immediately after exiting spinner
-        if answer_text:
-            st.markdown(answer_text)
-
-            if sources:
-                with st.expander(f"📚 View Sources & Citations ({len(sources)})"):
-                    for idx, doc in enumerate(sources, start=1):
-                        source_file = doc.metadata.get("source", "Unknown file")
-                        page = doc.metadata.get("page")
-                        page_label = f" · Page {page + 1}" if page is not None else ""
-                        st.markdown(
-                            f"**Citation {idx}** — `{source_file}`{page_label}\n"
-                            f"```\n{doc.page_content.strip()}\n```"
+                progress_bar = st.progress(0, text="Preparing document...")
+                with st.spinner(f"Indexing {uploaded_file.name} into current session..."):
+                    try:
+                        progress_bar.progress(25, text="Loading document...")
+                        progress_bar.progress(50, text="Splitting into chunks...")
+                        progress_bar.progress(75, text="Generating embeddings with session tag...")
+                        result = ingest_document(
+                            file_path=str(saved_file_path),
+                            username=current_username,
+                            session_id=current_session_id,
                         )
+                        progress_bar.progress(100, text="Completed!")
 
-            save_chat_message(current_username, current_session_id, "assistant", answer_text)
+                        st.success(
+                            f"Indexed **{result['chunks_created']}** chunks from `{uploaded_file.name}`."
+                        )
+                    except Exception as e:
+                        progress_bar.empty()
+                        st.error(f"Ingestion failed: {e}")
 
-        elif error_msg:
-            st.error(error_msg)
-            save_chat_message(current_username, current_session_id, "assistant", error_msg)
+        st.divider()
 
-    # 5. Explicitly rerun so the chat title and sidebar update immediately
-    st.rerun()
+        # 3. Recent Chats Section (Scoped to logged-in user with UUID lookup)
+        st.subheader("Recent Chats")
+        recent_chats = get_recent_chats(current_username)
+
+        if not recent_chats:
+            st.caption("No recent chats yet.")
+        else:
+            # Display user's past chats in reverse order (newest first)
+            for chat_item in reversed(recent_chats):
+                chat_sid = chat_item["session_id"]
+                chat_title = chat_item["title"]
+                is_active = (chat_sid == current_session_id)
+                label = f"💬  {chat_title}" + (" (active)" if is_active else "")
+
+                if st.button(label, key=f"btn_chat_{chat_sid}", use_container_width=True):
+                    st.session_state.active_session_id = chat_sid
+                    st.rerun()
+
+        st.divider()
+
+        # 4. Settings & User Controls
+        top_k = st.slider("Retrieval context chunks (k)", min_value=1, max_value=15, value=10)
+
+        if st.button("🗑️ Clear All Chats", use_container_width=True):
+            delete_all_chats(current_username)
+            st.session_state.active_session_id = create_chat_session(current_username, "New Chat")
+            st.rerun()
+
+        st.markdown("")
+
+        # 5. Logout Button
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.logged_in_username = None
+            st.session_state.logged_in_name = None
+            st.session_state.active_session_id = None
+            st.rerun()
+
+    # ============================================================================
+    # 6. MAIN CHAT AREA & STRICT SESSION GUARDRAIL
+    # ============================================================================
+
+    current_title = get_chat_title(current_username, current_session_id)
+    history_messages = get_chat_messages(current_username, current_session_id)
+
+    # Render Header / Greeting
+    if current_title == "New Chat" and len(history_messages) == 0:
+        st.title(f"Hi {current_display_name}!")
+        st.markdown("Welcome to **Knowledge Assistant**. Upload a document in the sidebar to start asking questions in this chat.")
+    else:
+        st.title(current_title)
+
+    # Render Chat History for Active Session
+    for message in history_messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Chat Input Logic & Guardrail
+    if prompt := st.chat_input("Ask a question about your documents..."):
+        # 1. Dynamic Chat Naming if title is still default "New Chat"
+        if current_title in ("New Chat", "", None):
+            words = prompt.strip().split()
+            dynamic_title = " ".join(words[:5]) + ("..." if len(words) > 5 else "")
+            update_chat_title(current_username, current_session_id, dynamic_title)
+        else:
+            dynamic_title = None
+
+        # 2. Instantly render and save the user message
+        save_chat_message(current_username, current_session_id, "user", prompt, title=dynamic_title)
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # 3. Instantly open assistant container & show spinner BEFORE any backend/DB check
+        with st.chat_message("assistant"):
+            with st.spinner("Searching documents..."):
+                # --- ALL BACKEND & DATABASE CHECKS RUN INSIDE THIS SPINNER ---
+                has_docs = has_session_documents(current_username, current_session_id)
+
+                # Condition A: 0 chunks in this session (Greeting vs Guardrail Warning)
+                if not has_docs:
+                    clean_input = prompt.lower().strip().rstrip("!?.")
+                    common_greetings = {
+                        "hi", "hello", "hey", "hii", "hiii", "heyy",
+                        "greetings", "good morning", "good afternoon", "good evening"
+                    }
+
+                    if clean_input in common_greetings:
+                        answer_text = (
+                            f"Hi {st.session_state.logged_in_name}! I would love to help you. "
+                            f"Please upload a document in the sidebar first so we can get started."
+                        )
+                    else:
+                        answer_text = "Please upload a document in this specific chat first before asking questions."
+
+                    sources = []
+                    error_msg = None
+
+                # Condition B: Chunks exist -> Run RAG Pipeline (similarity search + LLM)
+                else:
+                    try:
+                        response = ask_question(
+                            question=prompt,
+                            k=top_k,
+                            username=current_username,
+                            session_id=current_session_id,
+                        )
+                        answer_text = response["answer"]
+                        sources = response.get("source_documents", [])
+                        error_msg = None
+                    except Exception as e:
+                        answer_text = None
+                        sources = []
+                        error_msg = f"⚠️ An error occurred: `{e}`"
+
+            # 4. Display response immediately after exiting spinner
+            if answer_text:
+                st.markdown(answer_text)
+
+                if sources:
+                    with st.expander(f"📚 View Sources & Citations ({len(sources)})"):
+                        for idx, doc in enumerate(sources, start=1):
+                            source_file = doc.metadata.get("source", "Unknown file")
+                            page = doc.metadata.get("page")
+                            page_label = f" · Page {page + 1}" if page is not None else ""
+                            st.markdown(
+                                f"**Citation {idx}** — `{source_file}`{page_label}\n"
+                                f"```\n{doc.page_content.strip()}\n```"
+                            )
+
+                save_chat_message(current_username, current_session_id, "assistant", answer_text)
+
+            elif error_msg:
+                st.error(error_msg)
+                save_chat_message(current_username, current_session_id, "assistant", error_msg)
+
+        # 5. Explicitly rerun so the chat title and sidebar update immediately
+        st.rerun()
+
+

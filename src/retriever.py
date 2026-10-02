@@ -27,7 +27,7 @@ from src.vector_store import load_vector_store
 
 def get_retriever(
     vector_store: Optional[Chroma] = None,
-    k: int = 3,
+    k: int = 10,
     search_type: str = "similarity",
     username: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -39,7 +39,7 @@ def get_retriever(
     Args:
         vector_store (Chroma, optional): Active Chroma vector store instance.
                                          Defaults to loading the persistent store from disk.
-        k (int): Number of top relevant document chunks to retrieve (default: 3).
+        k (int): Number of top relevant document chunks to retrieve (default: 10).
         search_type (str): Retrieval algorithm ('similarity' or 'mmr'). Default: 'similarity'.
         username (str, optional): Target user's username for metadata-filtered retrieval.
         session_id (str, optional): Target chat session UUID for session-level isolation.
@@ -77,7 +77,7 @@ def get_retriever(
 def retrieve_documents(
     query: str,
     vector_store: Optional[Chroma] = None,
-    k: int = 3,
+    k: int = 10,
     username: Optional[str] = None,
     session_id: Optional[str] = None,
 ) -> List[Document]:

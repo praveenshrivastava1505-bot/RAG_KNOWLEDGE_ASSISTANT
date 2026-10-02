@@ -10,8 +10,8 @@ python-dotenv
 # --- Required for Core RAG (Modules 2–10) ---
 langchain-core
 langchain-community
-langchain-huggingface
-huggingface_hub
+langchain-google-genai
+google-generativeai
 sentence-transformers
 langchain-text-splitters
 langchain-chroma

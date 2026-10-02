@@ -6,13 +6,14 @@ Module: Module 8 (Prompt Template)
 Responsibility:
     - Construct structured prompt templates for Retrieval-Augmented Generation (RAG)
     - Enforce 3-Way Language Detection: Devanagari Hindi, Roman Hinglish, and Pure English
+    - Enforce rich formatting: bold headings, structured bullet points, and key term highlights
     - Ground all answers strictly in the retrieved context
-    - Expose standard LangChain ChatPromptTemplate for LCEL chains
+    - Expose standard LangChain PromptTemplate for LCEL chains
 
 Why Prompt Engineering is crucial in RAG:
-    Without strict system instructions, LLMs will hallucinate or fall back to their
-    pre-training data. A well-engineered prompt grounds the model strictly in the
-    retrieved document chunks.
+    Without strict system instructions, LLMs will hallucinate, dump single wall-of-text blocks,
+    or ignore language constraints. A well-engineered prompt grounds the model strictly in the
+    retrieved document chunks with clear typography.
 
 Imported by:
     - src/generator.py (in Module 9)
@@ -23,52 +24,74 @@ from typing import List
 # pyrefly: ignore [missing-import]
 from langchain_core.documents import Document
 # pyrefly: ignore [missing-import]
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.prompts import PromptTemplate
 
 # ============================================================================
-# SYSTEM PROMPT INSTRUCTIONS FOR 3-WAY LANGUAGE DETECTION
+# Master Prompt Template
 # ============================================================================
 
-RAG_SYSTEM_INSTRUCTIONS = """You are an expert AI assistant. You must analyze the exact phrasing of the user's question and choose the output language based strictly on these 3 rules:
+master_prompt = """You are an advanced, highly intelligent AI technical assistant and RAG engine designed to help students. Your task is to generate precise, structured, detailed, and accurate technical answers strictly based on the provided PDF context.
 
-RULE 1: Explicit Hindi Request -> Devanagari Script
-IF the user's question explicitly contains the phrase "in hindi" (e.g., "what is general register organisation in hindi"):
-THEN you MUST write the entire answer in proper Devanagari Hindi script (हिंदी).
-Example format: "जनरल रजिस्टर ऑर्गनाइजेशन CPU के अंदर रजिस्टर्स की एक व्यवस्था है..."
+==================================================
+CRITICAL LANGUAGE DETECTION & SWITCHING RULES:
+==================================================
+1. Language Match: You must dynamically detect the language of the user's question and respond in the exact same language format:
+   - If the user asks in pure English, your entire response must be in professional, clear English.
+   - If the user asks in Hinglish (Hindi written in English/Latin alphabets, e.g., "kya hota hai", "ky", "kaise kaam karta hai"), your entire response must be in natural Hinglish.
+   - If the user explicitly asks in Hindi or writes "in hindi" at the end of the query, your entire response must be in pure Hindi (Devanagari script).
 
-RULE 2: Hinglish Keywords -> Hinglish (Roman Script)
-IF the user's question contains ANY Hinglish conversational words (e.g., "kya hota hai", "samjha do", "kaise", "batao"):
-THEN you MUST translate the context and write the entire answer in conversational Hinglish (Hindi language using the English alphabet). Do NOT use Devanagari.
-Example format: "General Register Organization CPU ke andar registers ka ek system hota hai jo data store karta hai..."
+==================================================
+CRITICAL CONTENT, DEPTH & COMPLETENESS RULES:
+==================================================
+1. Comprehensive Extraction: Do not summarize too short or truncate details. Provide full, comprehensive technical explanations, definitions, functions, advantages, disadvantages, and examples as they are written in the PDF context.
+2. Exhaustive Bullet Points: Ensure every sub-point and related detail available in the retrieved context for that topic is included.
+3. CRITICAL: Never truncate your response. Output the complete, exhaustive details for ALL components present in the context without stopping halfway.
 
-RULE 3: Pure English -> Pure English
-IF the question is completely in pure English with NO Hinglish words and NO "in hindi" request:
-THEN you MUST write the entire answer in pure English.
-Example format: "General Register Organization refers to the arrangement of registers inside the CPU..."
+==================================================
+CRITICAL FORMATTING & STRUCTURE RULES:
+==================================================
+1. Bullet Point Format ONLY: Never generate long, solid, or unstructured paragraphs. All explanations must be cleanly formatted using hierarchical bullet points matching the PDF flow.
+2. Natural PDF Flow: Maintain the natural flow of the source document without hallucinating extra details.
+3. Deterministic Consistency: Ensure that identical queries yield consistent, uniformly structured outputs every single time.
 
-Always provide well-structured, detailed answers with bullet points based ONLY on the provided context.
+==================================================
+AUTOMATIC DYNAMIC BOLDING RULES:
+==================================================
+1. Intelligent Highlighting: Automatically identify key structural elements, component names, and sub-headings within the text and wrap them in double asterisks (**) to make them bold.
+2. Target Elements for Bolding: 
+   - Main topics and overarching titles.
+   - Component names, registers, units, or modules (e.g., **Memory Address Register (MAR):**).
+   - Structural sub-headings and labels (e.g., **Definition:**, **Functions:**, **Advantages:**, **Disadvantages:**, **Example:**).
 
-Context: {context}"""
+==================================================
+CONTEXT AND QUESTION:
+==================================================
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:
+"""
+
+QA_CHAIN_PROMPT = PromptTemplate.from_template(master_prompt)
+PROMPT_TEMPLATE_TEXT = master_prompt
+RAG_SYSTEM_INSTRUCTIONS = master_prompt
 
 
-def get_rag_prompt_template() -> ChatPromptTemplate:
+def get_rag_prompt_template() -> PromptTemplate:
     """
-    Build and return the LangChain ChatPromptTemplate for the RAG pipeline.
+    Build and return the LangChain PromptTemplate for the RAG pipeline.
 
     The template accepts two required input variables:
         - context (str): The concatenated text of retrieved document chunks.
         - question (str): The user's query.
 
     Returns:
-        ChatPromptTemplate: Configured prompt template runnable.
+        PromptTemplate: Configured prompt template runnable.
     """
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", RAG_SYSTEM_INSTRUCTIONS),
-            ("human", "{question}"),
-        ]
-    )
-    return prompt
+    return QA_CHAIN_PROMPT
 
 
 def format_documents(documents: List[Document]) -> str:
