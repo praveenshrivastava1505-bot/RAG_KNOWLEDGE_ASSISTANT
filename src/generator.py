@@ -109,7 +109,7 @@ def get_llm(
 
     Args:
         model_name (str, optional): Hugging Face model repository identifier.
-                                     Defaults to LLM_MODEL from config.py ('HuggingFaceH4/zephyr-7b-beta').
+                                     Defaults to LLM_MODEL from config.py ('meta-llama/Meta-Llama-3-8B-Instruct').
         temperature (float, optional): Sampling temperature (0.0 to 1.0).
                                        Defaults to LLM_TEMPERATURE from config.py (0.3).
         api_key (str, optional): Hugging Face API token.
