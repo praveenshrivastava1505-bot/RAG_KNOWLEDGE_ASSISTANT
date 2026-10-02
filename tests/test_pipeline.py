@@ -22,7 +22,7 @@ def main():
     # Test 1: Query about content present in the ingested documents
     query_1 = "What is Retrieval-Augmented Generation (RAG) and what does it enhance?"
     print(f"\n[Test 1] Grounded Query: \"{query_1}\"")
-    print("Running RAG pipeline (Retrieval -> Prompt -> Gemini 2.5 Flash)...")
+    print("Running RAG pipeline (Retrieval -> Prompt -> Hugging Face Mistral-7B)...")
 
     response_1 = ask_question(query_1, k=2)
 

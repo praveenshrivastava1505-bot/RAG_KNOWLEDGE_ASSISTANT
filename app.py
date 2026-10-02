@@ -12,6 +12,7 @@ Responsibility:
 """
 
 from pathlib import Path
+# pyrefly: ignore [missing-import]
 import streamlit as st
 
 from src.rag_pipeline import ask_question, ingest_document

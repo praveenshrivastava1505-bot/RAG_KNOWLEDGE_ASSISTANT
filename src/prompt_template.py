@@ -5,8 +5,8 @@ Module: Module 8 (Prompt Template)
 
 Responsibility:
     - Construct structured prompt templates for Retrieval-Augmented Generation (RAG)
-    - Enforce hallucination control: instruct the LLM to answer strictly from retrieved context
-    - Instruct the model to say "I don't know based on the provided context" if the answer is missing
+    - Enforce 3-Way Language Detection: Devanagari Hindi, Roman Hinglish, and Pure English
+    - Ground all answers strictly in the retrieved context
     - Expose standard LangChain ChatPromptTemplate for LCEL chains
 
 Why Prompt Engineering is crucial in RAG:
@@ -20,25 +20,35 @@ Imported by:
 """
 
 from typing import List
+# pyrefly: ignore [missing-import]
 from langchain_core.documents import Document
+# pyrefly: ignore [missing-import]
 from langchain_core.prompts import ChatPromptTemplate
 
 # ============================================================================
-# SYSTEM PROMPT INSTRUCTIONS FOR GROUNDED RAG
+# SYSTEM PROMPT INSTRUCTIONS FOR 3-WAY LANGUAGE DETECTION
 # ============================================================================
 
-RAG_SYSTEM_INSTRUCTIONS = """You are a helpful, precise, and factual Knowledge Assistant.
-Your task is to answer the user's question based ONLY on the provided context snippets below.
+RAG_SYSTEM_INSTRUCTIONS = """You are an expert AI assistant. You must analyze the exact phrasing of the user's question and choose the output language based strictly on these 3 rules:
 
-Strict Guidelines:
-1. Rely solely on the provided Context. Do NOT use outside knowledge or make unsupported assumptions.
-2. If the answer cannot be found in or directly deduced from the Context, respond truthfully with:
-   "I don't know based on the provided context."
-3. Do not attempt to fabricate, guess, or hallucinate an answer.
-4. Keep your answer factual, clear, and well-structured.
+RULE 1: Explicit Hindi Request -> Devanagari Script
+IF the user's question explicitly contains the phrase "in hindi" (e.g., "what is general register organisation in hindi"):
+THEN you MUST write the entire answer in proper Devanagari Hindi script (हिंदी).
+Example format: "जनरल रजिस्टर ऑर्गनाइजेशन CPU के अंदर रजिस्टर्स की एक व्यवस्था है..."
 
-Context:
-{context}"""
+RULE 2: Hinglish Keywords -> Hinglish (Roman Script)
+IF the user's question contains ANY Hinglish conversational words (e.g., "kya hota hai", "samjha do", "kaise", "batao"):
+THEN you MUST translate the context and write the entire answer in conversational Hinglish (Hindi language using the English alphabet). Do NOT use Devanagari.
+Example format: "General Register Organization CPU ke andar registers ka ek system hota hai jo data store karta hai..."
+
+RULE 3: Pure English -> Pure English
+IF the question is completely in pure English with NO Hinglish words and NO "in hindi" request:
+THEN you MUST write the entire answer in pure English.
+Example format: "General Register Organization refers to the arrangement of registers inside the CPU..."
+
+Always provide well-structured, detailed answers with bullet points based ONLY on the provided context.
+
+Context: {context}"""
 
 
 def get_rag_prompt_template() -> ChatPromptTemplate:

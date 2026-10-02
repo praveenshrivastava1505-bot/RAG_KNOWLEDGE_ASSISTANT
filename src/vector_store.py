@@ -20,8 +20,11 @@ Imported by:
 """
 
 from typing import List, Optional
+# pyrefly: ignore [missing-import]
 from langchain_core.documents import Document
+# pyrefly: ignore [missing-import]
 from langchain_core.embeddings import Embeddings
+# pyrefly: ignore [missing-import]
 from langchain_chroma import Chroma
 
 from src.config import CHROMA_DB_DIR, CHROMA_COLLECTION_NAME

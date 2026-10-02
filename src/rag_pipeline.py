@@ -1,14 +1,14 @@
 """
-src/rag_pipeline.py — Complete RAG Pipeline (Orchestrator with Session-Level Data Isolation)
+src/rag_pipeline.py — Complete RAG Pipeline (Orchestrator with User Data Isolation)
 
 Modules:
-    - Module 6: Document Ingestion Pipeline (ingest_document with username + session_id metadata, batching, deduplication)
-    - Module 10: Query & Generation Pipeline (ask_question with strict session-level filtering)
+    - Module 6: Document Ingestion Pipeline (ingest_document with user metadata tag, rate-limit batching, deduplication)
+    - Module 10: Query & Generation Pipeline (ask_question with user metadata filtering)
 
 Responsibility:
     - Central orchestrator connecting all individual modules together
-    - Ingestion Pipeline: Injects both username AND session_id into chunk metadata, splits, embeds, stores in ChromaDB
-    - Query Pipeline: Filters retrieval strictly by BOTH username AND session_id, formats prompt, generates grounded answer
+    - Ingestion Pipeline: Injects logged-in username into chunk metadata, splits, embeds, stores in ChromaDB
+    - Query Pipeline: Filters retrieval strictly by username, formats prompt, generates grounded answer with Hugging Face LLM
 
 Imported by:
     - app.py (Streamlit UI)
@@ -37,7 +37,7 @@ from src.generator import get_llm
 
 
 # ============================================================================
-# 1. INGESTION PIPELINE (Module 6 with Username & Session-Level Tagging)
+# 1. INGESTION PIPELINE (Module 6 with User-Level Metadata Tagging)
 # ============================================================================
 
 def ingest_document(
@@ -52,15 +52,16 @@ def ingest_document(
     Execute the complete document ingestion pipeline for a single file:
     1. Load text content from file (PDF, DOCX, TXT)
     2. Split text into structured, overlapping chunks
-    3. Tag each chunk with BOTH username AND session_id (UUID) for strict session isolation
+    3. Tag each chunk with the username and session_id metadata for strict
+       multi-user, multi-session data isolation
     4. Generate deterministic unique IDs to prevent duplicates on re-ingestion
     5. Generate vector embeddings in batches of 50 chunks
-    6. Save/overwrite chunks in ChromaDB with deterministic IDs and session metadata
+    6. Save/overwrite chunks in ChromaDB with deterministic IDs and user metadata
 
     Args:
         file_path (str): Path to the target document.
         username (str, optional): The owner/uploader username for data isolation.
-        session_id (str, optional): The target chat session UUID for session isolation.
+        session_id (str, optional): The active chat session UUID for session-level isolation.
         chunk_size (int, optional): Custom character chunk size.
         chunk_overlap (int, optional): Custom character chunk overlap.
         batch_size (int): Number of chunks to process per API batch (default: 50).
@@ -86,20 +87,19 @@ def ingest_document(
     if not chunks:
         raise ValueError(f"Failed to create chunks from document: '{file_path}'")
 
-    # Step 3: Inject user and session metadata for strict session-level isolation
+    # Step 3: Inject user + session metadata for strict data isolation
     clean_user = username.strip() if username else None
-    clean_session_id = session_id.strip() if session_id else None
-
+    clean_session = session_id.strip() if session_id else None
     for chunk in chunks:
         if clean_user:
             chunk.metadata["username"] = clean_user
-        if clean_session_id:
-            chunk.metadata["session_id"] = clean_session_id
+        if clean_session:
+            chunk.metadata["session_id"] = clean_session
 
     # Step 4: Generate deterministic unique IDs for all chunks
     total_chunks = len(chunks)
-    id_parts = [p for p in (clean_user, clean_session_id, file_path) if p]
-    prefix = "_".join(id_parts) if id_parts else file_path
+    prefix_parts = [p for p in [clean_user, clean_session, file_path] if p]
+    prefix = "_".join(prefix_parts)
     ids = [f"{prefix}_{i}" for i in range(total_chunks)]
 
     # Step 5: Embedding Model (Module 4) & Vector Store (Module 5)
@@ -111,21 +111,15 @@ def ingest_document(
         collection_name=CHROMA_COLLECTION_NAME,
     )
 
-    # Process document chunks in batches with deterministic IDs and session metadata
+    # Process document chunks in batches with deterministic IDs and user metadata
     for i in range(0, total_chunks, batch_size):
         batch = chunks[i : i + batch_size]
         batch_ids = ids[i : i + batch_size]
 
         vector_store.add_documents(documents=batch, ids=batch_ids)
 
+        # Chunks are embedded and saved to vector store
         processed = min(i + batch_size, total_chunks)
-
-        # If more chunks remain to be processed, wait 60 seconds to reset Gemini API RPM quota
-        if processed < total_chunks:
-            print(
-                f"Rate limit protection: sleeping for 60s... Processed {processed}/{total_chunks} chunks"
-            )
-            time.sleep(60)
 
     total_chunks_in_db = vector_store._collection.count()
 
@@ -133,7 +127,7 @@ def ingest_document(
         "status": "success",
         "file_path": file_path,
         "username": clean_user,
-        "session_id": clean_session_id,
+        "session_id": clean_session,
         "raw_pages_loaded": len(raw_docs),
         "chunks_created": len(chunks),
         "total_chunks_in_db": total_chunks_in_db,
@@ -141,7 +135,7 @@ def ingest_document(
 
 
 # ============================================================================
-# 2. QUERY & GENERATION PIPELINE (Module 10 with Session-Level Metadata Filtering)
+# 2. QUERY & GENERATION PIPELINE (Module 10 with User-Level Metadata Filtering)
 # ============================================================================
 
 def ask_question(
@@ -152,8 +146,10 @@ def ask_question(
     session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Execute the complete RAG query pipeline with strict session-level data isolation:
-    1. Retrieve the top-k most relevant document chunks matching BOTH username AND session_id (Module 7)
+    Execute the complete RAG query pipeline with strict multi-user, multi-session
+    data isolation:
+    1. Retrieve the top-k most relevant document chunks from ChromaDB, filtered
+       by username and session_id (Module 7)
     2. Format the chunks into a unified context string (Module 8)
     3. Construct the grounded prompt and send to Gemini LLM (Module 9)
     4. Parse and return the answer string alongside source citations
@@ -162,16 +158,14 @@ def ask_question(
         question (str): The user's query or question.
         k (int): Number of relevant document chunks to retrieve (default: 3).
         vector_store (Chroma, optional): Active vector store instance.
-        username (str, optional): Logged-in username to enforce user isolation.
-        session_id (str, optional): Active chat session UUID to enforce session isolation.
+        username (str, optional): Logged-in username to enforce data isolation.
+        session_id (str, optional): Active chat session UUID for session-level isolation.
 
     Returns:
         Dict[str, Any]: Dictionary containing:
             - 'question' (str): Original query.
             - 'answer' (str): Generated natural language answer.
             - 'source_documents' (List[Document]): Retrieved chunk citations.
-            - 'username' (str): Query username.
-            - 'session_id' (str): Query session ID.
 
     Raises:
         ValueError: If question is empty or ChromaDB contains no data.
@@ -181,15 +175,15 @@ def ask_question(
 
     clean_question = question.strip()
     clean_user = username.strip() if username else None
-    clean_session_id = session_id.strip() if session_id else None
+    clean_session = session_id.strip() if session_id else None
 
-    # Step 1: Session-Filtered Similarity Search (Module 7: Retriever)
+    # Step 1: User + Session Filtered Similarity Search (Module 7: Retriever)
     retrieved_docs: List[Document] = retrieve_documents(
         query=clean_question,
         vector_store=vector_store,
         k=k,
         username=clean_user,
-        session_id=clean_session_id,
+        session_id=clean_session,
     )
 
     # Step 2: Context Formatting (Module 8: Prompt Template)
@@ -200,7 +194,7 @@ def ask_question(
     llm = get_llm()
     output_parser = StrOutputParser()
 
-    # Step 4: LCEL Chain Composition: Prompt -> Gemini LLM -> String Output Parser
+    # Step 4: LCEL Chain Composition: Prompt -> Hugging Face LLM -> String Output Parser
     rag_chain = prompt_template | llm | output_parser
 
     # Step 5: Invoke Chain
@@ -216,5 +210,5 @@ def ask_question(
         "answer": answer.strip(),
         "source_documents": retrieved_docs,
         "username": clean_user,
-        "session_id": clean_session_id,
+        "session_id": clean_session,
     }

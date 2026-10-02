@@ -8,7 +8,7 @@ Every other module imports its configuration from here.
 
 What it does:
     1. Loads your secret API key from the .env file (so it never appears in code)
-    2. Defines which models to use (local HuggingFace for embeddings, Gemini for LLM)
+    2. Defines which models to use (local HuggingFace for embeddings, Hugging Face Inference API for LLM)
     3. Defines how to split documents (chunk size, overlap)
     4. Defines where ChromaDB stores its data
 
@@ -37,14 +37,13 @@ load_dotenv()
 # ============================================================
 # 2. API KEY
 # ============================================================
-# The langchain-google-genai package looks for GOOGLE_API_KEY
-# in the environment. We also support GEMINI_API_KEY as a
-# fallback, in case you named it differently in your .env file.
+# Hugging Face Hub token for accessing the Hugging Face Inference API.
+# Loaded securely from your .env file.
 #
 # IMPORTANT: Never hardcode your actual key here!
 # ============================================================
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
 
 # ============================================================
 # 3. MODEL SETTINGS
@@ -57,8 +56,8 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 #   all-MiniLM-L6-v2 produces dense 384-dimensional semantic vectors.
 #
 # LLM_MODEL:
-#   The Gemini model used for generating answers. "gemini-3.6-flash"
-#   is fast, cost-efficient, and available on the free tier.
+#   Fast, open-source model optimized for text-generation and RAG.
+#   "HuggingFaceH4/zephyr-7b-beta" works natively with task="text-generation".
 #
 # LLM_TEMPERATURE:
 #   Controls how "creative" the LLM responses are.
@@ -69,8 +68,9 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_DIMENSIONS = 384
-LLM_MODEL = "gemini-3.6-flash"
+LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 LLM_TEMPERATURE = 0.3
+LLM_MAX_TOKENS = 1024
 
 # ============================================================
 # 4. TEXT SPLITTING SETTINGS
